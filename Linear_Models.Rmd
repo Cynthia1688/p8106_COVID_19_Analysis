@@ -1,0 +1,171 @@
+---
+title: "Linear Models"
+author: "Yangyang Chen"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+To gain a better understanding of the factors that predict recovery time from COVID-19 illness, a study was designed to combine three existing cohort studies that have been tracking participants for several years. The study collects recovery information through questionnaires and medical records, and leverages existing data on personal characteristics prior to the pandemic.
+
+In this project, we predict the recovery time based on important risk factors. The training data is in “training_df”, and the test data is in “training_df”. The response is in the column “Time to recovery (tt_recovery_time)”, and other variables can be used as predictors. The variable definitions can be found in “dictionary.txt”.
+
+First, we import the data and adjust the variable type. As we want to compare different models afterwards, we use caret.
+
+```{r}
+library(caret)
+library(glmnet)
+library(tidymodels)
+```
+
+```{r}
+set.seed(2024)
+load("~/Desktop/Data Science II/Group_Project/recovery.RData")  
+dat = dat |> janitor::clean_names()
+
+# data splitting
+data.split = initial_split(dat, prop = 0.8)
+training_data = training(data.split)
+testing_data = testing(data.split)
+
+# check missing values
+training_data |> is.na() |> sum()
+testing_data |> is.na() |> sum()
+
+# summary of training and testing data
+training_data |> summary()
+testing_data |> summary()
+
+# training data
+train.x = model.matrix(recovery_time ~ ., training_data)[, -1] 
+train.y = training_data$recovery_time
+
+# test data
+test.x = model.matrix(recovery_time ~ ., testing_data)[, -1] 
+test.y = testing_data$recovery_time
+
+# cross validation
+ctrl = trainControl(method = "cv", number = 10) 
+ctrl_1SE = trainControl(method = "cv", number = 10,
+                        selectionFunction = "oneSE")
+```
+
+There is no missing data in both datasets. The training dataset has 2400 observation and 16 variables, and the test dataset has 600 samples and 16 variables.
+
+# Lasso Regression Model
+```{r}
+set.seed(2024)
+lasso.fit = training_data |> 
+  train(recovery_time ~ ., data = _, method = "glmnet",
+        tuneGrid = expand.grid(
+          alpha = 1,
+          lambda = exp(seq(6, 0, length = 100))),
+        trControl = ctrl,
+        preProcess = c("center", "scale"))
+plot(lasso.fit, xTrans = log)
+```
+The flattening in the curve occurs because the lasso regression model has reached a stable solution where no more coefficients become zero as the regularization parameter increases. At this point, further increasing the regularization parameter does not change the set of non-zero coefficients or their values, resulting in a flat region where the model's performance remains constant. This behavior indicates that the model has achieved the optimal level of sparsity, with the regularization parameter value at the start of the flat region corresponding to the desired sparse solution.
+
+```{r}
+lasso.pred = predict(lasso.fit, newdata = testing_data)
+mse.lasso = mean((test.y - lasso.pred) ^ 2)
+```
+
+The selected tuning parameter is 1, and the test error (MSE) is 608.0764. Now, we apply the 1SE rule and refit the model.
+
+```{r}
+lasso_1SE.fit = training_data |>
+  train(recovery_time ~ ., 
+        data = _, 
+        method = "glmnet",
+        tuneGrid = expand.grid(
+          alpha = 1,
+          lambda = exp(seq(6, 0, length = 100))),
+        trControl = ctrl_1SE)
+lasso.coef_1SE = coef(lasso_1SE.fit$finalModel, 
+                      s = lasso_1SE.fit$bestTune$lambda)
+```
+
+There exists problem in our model. When the 1SE rule is applied, the selected tuning parameter is $\alpha = 1, \lambda = 403.43$, and 0 predictors are included in the model.
+
+## Elastic Net Model
+
+```{r}
+set.seed(2024)
+enet.fit = training_data |>
+  train(recovery_time ~ ., data = _, method = "glmnet",
+        tuneGrid = expand.grid(
+          alpha = seq(0, 1, length = 21),
+          lambda = exp(seq(8, 0, length = 100))),
+        preProcess = c("center", "scale"), 
+        trControl = ctrl)
+myCol = rainbow(25) 
+myPar =
+  list(superpose.symbol = list(col = myCol), 
+       superpose.line = list(col = myCol))
+plot(enet.fit, par.settings = myPar)
+```
+
+The vertical line pattern in the graph is a characteristic behavior of the elastic net model. It occurs because the elastic net combines lasso and ridge regularization, which can lead to sparse solutions with some coefficients becoming exactly zero. As the regularization parameter increases, the model transitions between different sparse solutions, causing sudden drops or jumps in the cross-validation error curve. 
+
+```{r}
+enet.pred = predict(enet.fit, newdata = testing_data) 
+mse.enet = mean((test.y - enet.pred) ^ 2)
+```
+
+The selected tuning parameter is $\alpha = 0$, $\lambda = 1$, and the test error (MSE) is 589.642. Now, we try to apply the 1SE rule and refit the model.
+
+```{r}
+set.seed(2024)
+enet_1SE.fit = training_data |>
+  train(recovery_time ~ ., 
+        data = _, 
+        method = "glmnet",
+        tuneGrid = expand.grid(
+          alpha = seq(0, 1, length = 21),
+          lambda = exp(seq(8, 0, length = 100))),
+        preProcess = c("center", "scale"), 
+        trControl = ctrl_1SE)
+enet_1SE.pred = predict(enet_1SE.fit, newdata = testing_data)
+mse.enet_1SE = mean((test.y - enet_1SE.pred) ^ 2)
+```
+When the 1SE rule is applied, the selected tuning parameter is $\alpha = 0$, $\lambda = 191.0481$, and the test error (MSE) is 654.9077.
+
+## Partial Least Square
+
+```{r}
+set.seed(2024)
+
+pls.fit = train(train.x, train.y, method = "pls",
+  tuneGrid = data.frame(ncomp = 1:19),
+  trControl = ctrl, preProcess = c("center", "scale"))
+
+ggplot(pls.fit, highlight = T)
+```
+
+```{r}
+pls.pred = predict(pls.fit, newdata = test.x) 
+mse.pls = mean((test.y - pls.pred) ^ 2)
+```
+
+As illustrated in the plot, 11 components are included in my model, and the test error (MSE) is 472.1037.
+
+## Linear Model Comparison
+
+Here, we compare the CV results of different models and choose the model with the smallest median RMSE.
+
+```{r}
+resamp =
+  resamples(list(lasso = lasso.fit, 
+                 lasso_1SE = lasso_1SE.fit,
+                 enet = enet.fit, 
+                 enet_1SE = enet_1SE.fit, 
+                 pls = pls.fit))
+summary(resamp)
+```
+
+Using bw-plot to compare their RMSE.
+```{r}
+bwplot(resamp, metric = "RMSE")
+```
+
+Hence, we selected partial least squre model as it has smallest RMSE.
