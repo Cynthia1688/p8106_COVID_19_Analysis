@@ -1,0 +1,174 @@
+---
+title: "EDA_data_process_Candice"
+author: "Candice Yu"
+date: "2024-03-23"
+output:
+    pdf_document:
+       latex_engine: xelatex
+       toc: true
+       toc_depth: 2
+---
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+```{r echo = T, message = FALSE, results = 'hide', warning = FALSE}
+library(caret)
+library(tidyverse)
+library(gridExtra)
+```
+
+# Load Data 
+```{r}
+load("./Data/recovery.RData")
+dat <- dat %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity)) %>%
+  select(-id)
+```
+
+
+# EDA
+## Overview of the Data 
+```{r}
+# brief summary of the data 
+skimr::skim(dat)
+```
+
+## EDA for Continuous Variables 
+
+### Correlation plot for continuous variables
+```{r}
+# correlation plot for continuous variables
+continuous_vars <- dat %>% 
+  select(height, weight, bmi, SBP, LDL, recovery_time)
+correlations <- cor(continuous_vars) 
+corrplot::corrplot(correlations, method = "circle")
+```
+
+The correlation plot shows some relationships between variables, but none of them appear to be strongly correlated with `recovery_time`. This may suggest that linear relationships are not strong, and hence a non-linear model could be more appropriate.
+
+
+### Scatter plots to explore potential relationships
+```{r}
+# between time to recovery and bmi
+ggplot(dat, aes(x = bmi, y = recovery_time, color = gender)) + 
+  geom_point() + geom_smooth(method = "lm") +
+  labs(title = "Time to Recovery vs. BMI", 
+       x = "BMI", 
+       y = "Time to Recovery (Days)")
+
+# between time to recovery and height
+ggplot(dat, aes(x = height, y = recovery_time, color = gender)) + 
+  geom_point() + geom_smooth(method = "lm") +
+  labs(title = "Time to Recovery vs. Height", 
+       x = "Height", 
+       y = "Time to Recovery (Days)")
+```
+## EDA for Discrete Variables 
+### Heatmap for severity and vaccination status
+```{r}
+# Heatmap for systolic blood pressure across severity and vaccination status
+dat %>% 
+  group_by(severity, vaccine) %>%
+  summarise(avg_recovery_time = mean(recovery_time)) %>%
+  ggplot(aes(x = factor(severity), y = factor(vaccine), fill = avg_recovery_time)) +
+  geom_tile() +
+  labs(x = "Severity of COVID-19", 
+       y = "Vaccination Status", 
+       fill = "Average Recovery Time")
+```
+### Faceted grid plot for categorical variables
+```{r, fig.width = 8, fig.height = 10}
+
+# faceted grid plot for categorical variables
+categorical_vars <- c("smoking", "diabetes", "hypertension", "vaccine", "severity")
+faceted_plots <- lapply(categorical_vars, function(var) {
+  ggplot(dat, aes_string(x = var, y = "recovery_time")) + 
+    geom_boxplot(aes(fill = factor(..x..))) + 
+    facet_wrap(~study) + 
+    labs(title = paste("Recovery Time by", var), y = "Time to Recovery") +
+    theme_minimal()
+})
+
+# combine the plots into one grid
+grid.arrange(scatter_bmi, scatter_sbp, scatter_ldl, grobs = faceted_plots, ncol = 2)
+```
+
+The boxplots indicate a significant difference in recovery times between study groups A and B across several categorical factors, which suggests that `study` is an important variable to include in the model.
+
+
+# Preprocess of the Data 
+```{r}
+data <- dat
+
+# normalize/standardize numerical variables 
+num_vars <- names(data)[sapply(data, is.numeric)][-7]
+preprocess_params <- preProcess(data[, num_vars], method = c("center", "scale"))
+data[num_vars] <- predict(preprocess_params, data[, num_vars])
+
+# log transform 'recovery_time' since it's highly skewed
+data$recovery_time <- log(data$recovery_time) 
+```
+
+
+## Split data & Define the control method
+```{r}
+# split data into training and test sets
+set.seed(123) 
+indexes <- createDataPartition(data$recovery_time, p = 0.8, list = FALSE)
+train_data <- data[indexes, ]
+test_data <- data[-indexes, ]
+
+# matrix of predictors
+x <- train_data %>% select(-recovery_time)
+y <- train_data$recovery_time
+
+# define the control method for training
+ctrl1 <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
+
+```
+
+## Export the the training/test set & control method
+```{r}
+# save the training and test sets to CSV files
+write.csv(train_data, "./Data/train_data.csv", row.names = FALSE)
+write.csv(test_data, "./Data/test_data.csv", row.names = FALSE)
+
+# save the control method using saveRDS
+saveRDS(ctrl1, "./Data/train_control.rds")
+
+```
+
+## Load the the training/test set & control method
+```{r}
+# Load the training and test sets
+train_data <- read.csv("./Data/train_data.csv")
+test_data <- read.csv("./Data/test_data.csv")
+
+# Load the control method
+ctrl1 <- readRDS("./Data/train_control.rds")
+
+# change variables to be factors again
+train_data <- train_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+
+test_data <- train_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+```
+
+
