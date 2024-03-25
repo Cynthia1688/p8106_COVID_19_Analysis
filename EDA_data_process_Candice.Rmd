@@ -109,12 +109,12 @@ The boxplots indicate a significant difference in recovery times between study g
 data <- dat
 
 # normalize/standardize numerical variables 
-num_vars <- names(data)[sapply(data, is.numeric)][-7]
-preprocess_params <- preProcess(data[, num_vars], method = c("center", "scale"))
-data[num_vars] <- predict(preprocess_params, data[, num_vars])
+#num_vars <- names(data)[sapply(data, is.numeric)][-7]
+#preprocess_params <- preProcess(data[, num_vars], method = c("center", "scale"))
+#data[num_vars] <- predict(preprocess_params, data[, num_vars])
 
 # log transform 'recovery_time' since it's highly skewed
-data$recovery_time <- log(data$recovery_time) 
+#data$recovery_time <- log(data$recovery_time) 
 ```
 
 
