@@ -92,13 +92,6 @@ The MARS model is a flexible regression method capable of uncovering complex non
 - Interactions between variables can be important and are modeled by products of basis functions.
 - There is no assumption of a parametric form of the relationship between predictors and the response.
 
-**Model Training Procedure and Final Model:**
-
-1. Data Splitting: The dataset was split into training (80%) and test (20%) sets using a stratified random sampling approach based on `recovery_time`.
-2. The `train` function from the `caret` package was used to train the MARS model using 10-fold cross-validation. This approach helps to prevent overfitting and gives an estimate of the model performance on new data.
-3. The model with the lowest cross-validated Root Mean Squared Error (RMSE) was selected as the final model.
-
-
 **Final Model Selection:**
 
 - The optimal hyperparameters were degree (degree of interaction) = 3 and nprune (number of terms) = 16.
