@@ -146,7 +146,7 @@ saveRDS(ctrl1, "./Data/train_control.rds")
 
 ```
 
-## Load the the training/test set & control method
+## Load the training/test set & control method
 ```{r}
 # Load the training and test sets
 train_data <- read.csv("./Data/train_data.csv")
