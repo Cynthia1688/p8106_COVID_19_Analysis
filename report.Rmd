@@ -27,10 +27,76 @@ knitr::opts_chunk$set(
 ```{r}
 library(tidyverse)
 library(caret)
-load("./Data/recovery.RData")
-dat = dat |>
-  mutate(across(c(study, gender,hypertension,diabetes,vaccine,severity), ~factor(.))) 
-dat |> skimr::skim()
+## Load the the training/test set & control method
+
+# Load the training and test sets
+train_data <- read.csv("./Data/train_data.csv")
+test_data <- read.csv("./Data/test_data.csv")
+
+# Load the control method
+ctrl1 <- readRDS("./Data/train_control.rds")
+
+# change variables to be factors again
+train_data <- train_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+
+test_data <- test_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+```
+
+# GAM
+
+```{r}
+set.seed(1)
+
+x_train = train_data[1:14]
+y_train = train_data$recovery_time
+
+x_test = test_data[1:14]
+y_test = test_data$recovery_time
+
+model.gam <- train(x = x_train,
+                   y = y_train,
+                   method = "gam",
+                   #metric = "RMSE", by default
+                   trControl = trainControl(method = "cv", number = 10))
+
+
+model.gam$finalModel
+
+#plot(model.gam$finalModel)
+
+# Calculate training RMSE of optimal model
+gam_train_RMSE = sqrt(mean((y_train - predict(model.gam))^2))
+gam_train_RMSE
+
+# Calculate test RMSE of optimal model
+test_predictions = predict(model.gam, x_test)
+
+gam_test_RMSE = sqrt(mean((y_test - test_predictions)^2))
+gam_test_RMSE
+
+# 预测值
+predictions <- predict(gam_model, newdata = train_data)
+
+# 计算总偏差（Total Sum of Squares）
+TSS <- sum((train_data$recovery_time - mean(train_data$recovery_time))^2)
+
+# 计算残差偏差（Residual Sum of Squares）
+RSS <- sum((train_data$recovery_time - predict(model.gam))^2)
+
+# 计算R²
+R2 <- 1 - (RSS/TSS)
+R2
+
 ```
 
 ## MARS
@@ -60,22 +126,5 @@ ggplot(mars.fit)
 mars.fit$bestTune
 
 coef(mars.fit$finalModel) 
-```
-
-## Lasso
-
-```{r}
-set.seed(2)
-lasso.fit <- train(x, y,
-                   method = "glmnet",
-                   tuneGrid = expand.grid(alpha = 1, 
-                                          lambda = exp(seq(3, -5, length = 100))),
-                   trControl = ctrl1)
-plot(lasso.fit, xTrans = log)
-
-lasso.fit$bestTune
-
-# coefficients in the final model
-coef(lasso.fit$finalModel, lasso.fit$bestTune$lambda)
 ```
 
