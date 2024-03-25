@@ -1,5 +1,5 @@
 ---
-title: "Report"
+title: "GAM"
 date: "2024-03-21"
 output: 
   pdf_document:
@@ -54,6 +54,26 @@ test_data <- test_data %>%
 
 # GAM
 
+
+- **Family and Link Function**: The model assumes a Gaussian family for the error distribution and uses an identity link function. This is typical for a regression problem where the outcome is continuous.
+
+**Formula**: The outcome is modeled as a linear combination of several covariates, including gender, hypertension, diabetes, and others. Additionally, smooth terms for age, SBP, LDL, BMI, height, and weight are included to capture non-linear effects.
+
+ **GCV Score**: The Generalized Cross-Validation (GCV) score is 0.1915381, which assesses the model's predictive performance, with lower values indicating better fit.
+
+**Parametric Coefficients**: The table lists the estimated coefficients for each predictor, with their standard errors, t-values, and p-values. For instance, the coefficient for 'gender1' is -0.081585, and it is statistically significant at the 0.001 level (indicated by ***), suggesting a strong relationship with the outcome.
+
+**Smooth Terms Significance**: This section presents the significance of smooth terms, with 's(LDL)' and 's(BMI)' being highly significant (p < 0.001), indicating important non-linear relationships with the outcome.
+
+**Model Performance Metrics**:
+  - The adjusted R-squared value is 0.195, indicating that approximately 19.5% of the variance in the outcome is explained by the model.
+  - Deviance explained is 20.3%, which is another way of measuring model fit, similar to R-squared.
+  - The scale estimate is about 0.18951.
+  - The size of the dataset used for the model is 2,402 observations.
+
+In summary, this GAM model includes both linear and non-linear relationships between predictors and the outcome. Some predictors show significant effects on the outcome, with non-linear relationships for variables like BMI and LDL being notably significant. Overall, the model explains a modest proportion of the variance in the outcome, suggesting there may be other factors not included in the model that also influence the outcome.
+
+
 ```{r}
 set.seed(1)
 
@@ -70,8 +90,8 @@ model.gam <- train(x = x_train,
                    trControl = trainControl(method = "cv", number = 10))
 
 
-model.gam$finalModel
 
+summary(model.gam$finalModel)
 #plot(model.gam$finalModel)
 
 # Calculate training RMSE of optimal model
@@ -84,47 +104,13 @@ test_predictions = predict(model.gam, x_test)
 gam_test_RMSE = sqrt(mean((y_test - test_predictions)^2))
 gam_test_RMSE
 
-# 预测值
-predictions <- predict(gam_model, newdata = train_data)
-
-# 计算总偏差（Total Sum of Squares）
+# Total Sum of Squares
 TSS <- sum((train_data$recovery_time - mean(train_data$recovery_time))^2)
 
-# 计算残差偏差（Residual Sum of Squares）
+# Residual Sum of Squares
 RSS <- sum((train_data$recovery_time - predict(model.gam))^2)
 
-# 计算R²
+# R²
 R2 <- 1 - (RSS/TSS)
 R2
-
 ```
-
-## MARS
-
-```{r}
-
-# matrix of predictors 
-x <- model.matrix(recovery_time ~ ., dat |> select(-id))[, -1]
-# vector of response
-y <- dat$recovery_time
-
-mars_grid <- expand.grid(degree = 1:3, 
-                         nprune = 2:15)
-
-set.seed(2)
-ctrl1 <- trainControl(method = "cv", number = 10)
-
-mars.fit <- train(x, y,
-                  method = "earth",
-                  tuneGrid = mars_grid,
-                  trControl = ctrl1)
-
-
-ggplot(mars.fit)
-
-
-mars.fit$bestTune
-
-coef(mars.fit$finalModel) 
-```
-
