@@ -11,17 +11,46 @@ In this project, we predict the recovery time based on important risk factors. T
 
 First, we import the data and adjust the variable type. As we want to compare different models afterwards, we use caret.
 
-```{r}
+```{r, include = FALSE, message = FALSE, warning = FALSE}
+
 library(caret)
 library(glmnet)
 library(tidymodels)
+library(tidyverse)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
 
 ```{r}
-set.seed(2024)
-load("~/Desktop/Data Science II/Group_Project/recovery.RData")  
-dat = dat |> janitor::clean_names()
+set.seed(2716)
+# Load Data 
+load("./Data/recovery.RData")
+dat <- dat |> 
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity)) |> 
+  select(-id)
+```
 
+```{r}
 # data splitting
 data.split = initial_split(dat, prop = 0.8)
 training_data = training(data.split)
@@ -53,7 +82,7 @@ There is no missing data in both datasets. The training dataset has 2400 observa
 
 # Lasso Regression Model
 ```{r}
-set.seed(2024)
+set.seed(2716)
 lasso.fit = training_data |> 
   train(recovery_time ~ ., data = _, method = "glmnet",
         tuneGrid = expand.grid(
@@ -90,7 +119,7 @@ There exists problem in our model. When the 1SE rule is applied, the selected tu
 ## Elastic Net Model
 
 ```{r}
-set.seed(2024)
+set.seed(2716)
 enet.fit = training_data |>
   train(recovery_time ~ ., data = _, method = "glmnet",
         tuneGrid = expand.grid(
@@ -112,28 +141,12 @@ enet.pred = predict(enet.fit, newdata = testing_data)
 mse.enet = mean((test.y - enet.pred) ^ 2)
 ```
 
-The selected tuning parameter is $\alpha = 0$, $\lambda = 1$, and the test error (MSE) is 589.642. Now, we try to apply the 1SE rule and refit the model.
-
-```{r}
-set.seed(2024)
-enet_1SE.fit = training_data |>
-  train(recovery_time ~ ., 
-        data = _, 
-        method = "glmnet",
-        tuneGrid = expand.grid(
-          alpha = seq(0, 1, length = 21),
-          lambda = exp(seq(8, 0, length = 100))),
-        preProcess = c("center", "scale"), 
-        trControl = ctrl_1SE)
-enet_1SE.pred = predict(enet_1SE.fit, newdata = testing_data)
-mse.enet_1SE = mean((test.y - enet_1SE.pred) ^ 2)
-```
-When the 1SE rule is applied, the selected tuning parameter is $\alpha = 0$, $\lambda = 191.0481$, and the test error (MSE) is 654.9077.
+The selected tuning parameter is $\alpha = 0$, $\lambda = 1$, and the test error (MSE) is 589.642. 
 
 ## Partial Least Square
 
 ```{r}
-set.seed(2024)
+set.seed(2716)
 
 pls.fit = train(train.x, train.y, method = "pls",
   tuneGrid = data.frame(ncomp = 1:17),
@@ -158,7 +171,6 @@ resamp =
   resamples(list(lasso = lasso.fit, 
                  lasso_1SE = lasso_1SE.fit,
                  enet = enet.fit, 
-                 enet_1SE = enet_1SE.fit, 
                  pls = pls.fit))
 summary(resamp)
 ```
@@ -179,7 +191,7 @@ Since there are two tuning parameters associated with the MARS model: the degree
 ```{r}
 ctrl = trainControl(method = "cv", number = 10)
 mars.grid = expand.grid(degree = 1 : 3, nprune = seq(2, 20, by = 2))
-set.seed(2024)
+set.seed(2716)
 mars.fit = train(train.x, train.y, method = "earth", tuneGrid = mars.grid, trControl = ctrl)
 ggplot(mars.fit)
 summary(mars.fit$finalModel)
@@ -203,7 +215,7 @@ The test error measured by MSE using the final MARS model is $431.2879$.
 
 ## GAM
 ```{r}
-set.seed(2024)
+set.seed(2716)
 gam.fit = train(train.x, train.y, method = "gam", trControl = ctrl)
 summary(gam.fit$finalModel)
 ```
