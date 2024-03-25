@@ -125,7 +125,7 @@ The boxplots indicate a significant difference in recovery times between study g
 # Preprocess of the Data 
 ```{r}
 data <- dat %>%
-  mutate(-weight, -height)
+  select(-weight, -height)
 
 # normalize/standardize numerical variables 
 #num_vars <- names(data)[sapply(data, is.numeric)][-7]
