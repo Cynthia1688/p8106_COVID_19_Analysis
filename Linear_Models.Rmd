@@ -136,7 +136,7 @@ When the 1SE rule is applied, the selected tuning parameter is $\alpha = 0$, $\l
 set.seed(2024)
 
 pls.fit = train(train.x, train.y, method = "pls",
-  tuneGrid = data.frame(ncomp = 1:19),
+  tuneGrid = data.frame(ncomp = 1:17),
   trControl = ctrl, preProcess = c("center", "scale"))
 
 ggplot(pls.fit, highlight = T)
@@ -168,4 +168,62 @@ Using bw-plot to compare their RMSE.
 bwplot(resamp, metric = "RMSE")
 ```
 
-Hence, we selected partial least squre model as it has smallest RMSE.
+Hence, we selected partial least square model as it has smallest RMSE.
+
+## MARS
+
+Now, train a multivariate adaptive regression spline (MARS) model to predict the response variable.
+
+Since there are two tuning parameters associated with the MARS model: the degree of interactions and the number of retained terms, we need to perform a grid search to identify the optimal combination of these hyperparameters that minimize prediction error.
+
+```{r}
+ctrl = trainControl(method = "cv", number = 10)
+mars.grid = expand.grid(degree = 1 : 3, nprune = seq(2, 20, by = 2))
+set.seed(2024)
+mars.fit = train(train.x, train.y, method = "earth", tuneGrid = mars.grid, trControl = ctrl)
+ggplot(mars.fit)
+summary(mars.fit$finalModel)
+## Coefficient of the MARS model
+coef(mars.fit$finalModel)
+```
+The MARS model selects 2 of 25 terms, and 2 of 18 predictors. The most important variables are *bmi* (Body Mass Index; BMI = weight (in kilograms) / height (in meters) squared) and *studyB*(The study (A/B) that the participant belongs to).
+
+To better understand the relationship between these features and outstate, we can create partial dependence plots (PDPs) for each feature individually and also an interaction PDP. To simplify, here we only present the PDP for number of full-time undergraduates *sbp*.
+
+```{r}
+pdp::partial(mars.fit, pred.var = c("bmi"), grid.resolution = 10) |> autoplot()
+```
+Using the final model, we can predict on the test data.
+
+```{r}
+pred.mars = predict(mars.fit, newdata = test.x) 
+mse.mars = mean((pred.mars - test.y) ^ 2)
+```
+The test error measured by MSE using the final MARS model is $431.2879$.
+
+## GAM
+```{r}
+set.seed(2024)
+gam.fit = train(train.x, train.y, method = "gam", trControl = ctrl)
+summary(gam.fit$finalModel)
+```
+
+```{r}
+par(mar = c(2, 2, 2, 2), mfrow = c(2, 4))
+plot(gam.fit$finalModel)
+```
+
+It could be observed that certain variables (*age*, *sbp*, *ldl*) have no relationship with the *recovery_time*, *bmi*, and *height* both have a positive relationship with *recovery_time*. 
+
+Using the final model, we can predict on the test data.
+
+```{r}
+pred.gam = predict(gam.fit, newdata = test.x) 
+mse.gam = mean((pred.gam - test.y) ^ 2)
+```
+
+The test error measured by MSE using the final GAM is $416.6977$.
+
+
+
+
