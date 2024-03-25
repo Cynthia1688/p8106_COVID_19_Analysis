@@ -52,8 +52,6 @@ correlations <- cor(continuous_vars)
 corrplot::corrplot(correlations, method = "circle")
 ```
 
-The correlation plot shows some relationships between variables, but none of them appear to be strongly correlated with `recovery_time`. This may suggest that linear relationships are not strong, and hence a non-linear model could be more appropriate.
-
 
 ### Scatter plots to explore potential relationships
 ```{r}
@@ -71,6 +69,10 @@ ggplot(dat, aes(x = height, y = recovery_time, color = gender)) +
        x = "Height", 
        y = "Time to Recovery (Days)")
 ```
+
+The correlation plot and scatter plots show some relationships between continuous variables, but none of them appear to be strongly correlated with `recovery_time`. This may suggest that linear relationships are not strong, and hence a non-linear model could be more appropriate.
+
+
 ## EDA for Discrete Variables 
 ### Heatmap for severity and vaccination status
 ```{r}
@@ -80,10 +82,26 @@ dat %>%
   summarise(avg_recovery_time = mean(recovery_time)) %>%
   ggplot(aes(x = factor(severity), y = factor(vaccine), fill = avg_recovery_time)) +
   geom_tile() +
-  labs(x = "Severity of COVID-19", 
+  labs(title = "Heatmap for severity and vaccination status",
+       x = "Severity of COVID-19", 
        y = "Vaccination Status", 
        fill = "Average Recovery Time")
 ```
+
+The heatmap helps in understanding the bivariate relationship between severity, vaccination status, and recovery time. 
+
+**Observations from the Heatmap:**
+
+- Individuals with severe COVID-19 infection (1 on the x-axis) have longer average recovery times than those with non-severe infections, regardless of vaccination status. 
+- Vaccination status seems to have an influence on the recovery time. Those who are vaccinated (1 on the y-axis) tend to have shorter recovery times even when the infection is severe.
+
+**Implications for Modeling:**
+
+- The heatmap suggests there might be an interaction effect between severity and vaccination status on the recovery time. Therefore, when modeling, consider including an interaction term between these two variables.
+- Given the apparent differences in recovery time across the groups, both severity and vaccination status should be included as important predictors in the model.
+- If developing separate models for different subgroups is a consideration, you might want to stratify the analysis by severity or vaccination status.
+
+
 ### Faceted grid plot for categorical variables
 ```{r, fig.width = 8, fig.height = 10}
 
@@ -93,7 +111,7 @@ faceted_plots <- lapply(categorical_vars, function(var) {
   ggplot(dat, aes_string(x = var, y = "recovery_time")) + 
     geom_boxplot(aes(fill = factor(..x..))) + 
     facet_wrap(~study) + 
-    labs(title = paste("Recovery Time by", var), y = "Time to Recovery") +
+    labs(title = paste("Recovery time by", var), y = "Time to recovery") +
     theme_minimal()
 })
 
@@ -134,6 +152,13 @@ y <- train_data$recovery_time
 ctrl1 <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
 
 ```
+
+**Model Training Procedure and Final Model:**
+
+1. Data Splitting: The dataset was split into training (80%) and test (20%) sets using a stratified random sampling approach based on `recovery_time`.
+2. The `train` function from the `caret` package was used to train the MARS model using 10-fold cross-validation. This approach helps to prevent overfitting and gives an estimate of the model performance on new data.
+3. The model with the lowest cross-validated Root Mean Squared Error (RMSE) was selected as the final model.
+
 
 ## Export the the training/test set & control method
 ```{r}
