@@ -2,7 +2,9 @@
 title: "Linear Models"
 author: "Yangyang Chen"
 date: "`r Sys.Date()`"
-output: pdf_document
+output:
+  pdf_document:
+    latex_engine: xelatex
 ---
 
 To gain a better understanding of the factors that predict recovery time from COVID-19 illness, a study was designed to combine three existing cohort studies that have been tracking participants for several years. The study collects recovery information through questionnaires and medical records, and leverages existing data on personal characteristics prior to the pandemic.
@@ -74,11 +76,9 @@ test.y = testing_data$recovery_time
 
 # cross validation
 ctrl = trainControl(method = "cv", number = 10) 
-ctrl_1SE = trainControl(method = "cv", number = 10,
-                        selectionFunction = "oneSE")
 ```
 
-There is no missing data in both datasets. The training dataset has 2400 observation and 16 variables, and the test dataset has 600 samples and 16 variables.
+There is no missing data in both datasets. The training dataset has 2400 observation and 16 variables, and the test dataset has 600 samples and 17 variables.
 
 # Lasso Regression Model
 ```{r}
@@ -92,6 +92,7 @@ lasso.fit = training_data |>
         preProcess = c("center", "scale"))
 plot(lasso.fit, xTrans = log)
 ```
+
 The flattening in the curve occurs because the lasso regression model has reached a stable solution where no more coefficients become zero as the regularization parameter increases. At this point, further increasing the regularization parameter does not change the set of non-zero coefficients or their values, resulting in a flat region where the model's performance remains constant. This behavior indicates that the model has achieved the optimal level of sparsity, with the regularization parameter value at the start of the flat region corresponding to the desired sparse solution.
 
 ```{r}
@@ -99,22 +100,7 @@ lasso.pred = predict(lasso.fit, newdata = testing_data)
 mse.lasso = mean((test.y - lasso.pred) ^ 2)
 ```
 
-The selected tuning parameter is 1, and the test error (MSE) is 608.0764. Now, we apply the 1SE rule and refit the model.
-
-```{r}
-lasso_1SE.fit = training_data |>
-  train(recovery_time ~ ., 
-        data = _, 
-        method = "glmnet",
-        tuneGrid = expand.grid(
-          alpha = 1,
-          lambda = exp(seq(6, 0, length = 100))),
-        trControl = ctrl_1SE)
-lasso.coef_1SE = coef(lasso_1SE.fit$finalModel, 
-                      s = lasso_1SE.fit$bestTune$lambda)
-```
-
-There exists problem in our model. When the 1SE rule is applied, the selected tuning parameter is $\alpha = 1, \lambda = 403.43$, and 0 predictors are included in the model.
+The selected best tuning parameter is $\lambda = 1，\alpha = 1$, and the test error (MSE) is `r mse.lasso`.
 
 ## Elastic Net Model
 
@@ -141,7 +127,7 @@ enet.pred = predict(enet.fit, newdata = testing_data)
 mse.enet = mean((test.y - enet.pred) ^ 2)
 ```
 
-The selected tuning parameter is $\alpha = 0$, $\lambda = 1$, and the test error (MSE) is 589.642. 
+The selected tuning parameter is $\alpha = 0$, $\lambda = 1$, and the test error (MSE) is `r mse.enet` 
 
 ## Partial Least Square
 
@@ -151,7 +137,6 @@ set.seed(2716)
 pls.fit = train(train.x, train.y, method = "pls",
   tuneGrid = data.frame(ncomp = 1:17),
   trControl = ctrl, preProcess = c("center", "scale"))
-
 ggplot(pls.fit, highlight = T)
 ```
 
@@ -160,27 +145,12 @@ pls.pred = predict(pls.fit, newdata = test.x)
 mse.pls = mean((test.y - pls.pred) ^ 2)
 ```
 
-As illustrated in the plot, 11 components are included in my model, and the test error (MSE) is 472.1037.
+As illustrated in the plot, 11 components are included in my model, and the test error (MSE) is `r mse.pls`
 
-## Linear Model Comparison
-
-Here, we compare the CV results of different models and choose the model with the smallest median RMSE.
-
+The coefficients are as follows:
 ```{r}
-resamp =
-  resamples(list(lasso = lasso.fit, 
-                 lasso_1SE = lasso_1SE.fit,
-                 enet = enet.fit, 
-                 pls = pls.fit))
-summary(resamp)
+coef(pls.fit$finalModel)
 ```
-
-Using bw-plot to compare their RMSE.
-```{r}
-bwplot(resamp, metric = "RMSE")
-```
-
-Hence, we selected partial least square model as it has smallest RMSE.
 
 ## MARS
 
@@ -198,7 +168,7 @@ summary(mars.fit$finalModel)
 ## Coefficient of the MARS model
 coef(mars.fit$finalModel)
 ```
-The MARS model selects 2 of 25 terms, and 2 of 18 predictors. The most important variables are *bmi* (Body Mass Index; BMI = weight (in kilograms) / height (in meters) squared) and *studyB*(The study (A/B) that the participant belongs to).
+The MARS model selects 12 of 27 terms, and 8 of 17 predictors. The most important variables are *bmi* (Body Mass Index; BMI = weight (in kilograms) / height (in meters) squared) and *studyB*(The study (A/B) that the participant belongs to).
 
 To better understand the relationship between these features and outstate, we can create partial dependence plots (PDPs) for each feature individually and also an interaction PDP. To simplify, here we only present the PDP for number of full-time undergraduates *sbp*.
 
@@ -211,7 +181,7 @@ Using the final model, we can predict on the test data.
 pred.mars = predict(mars.fit, newdata = test.x) 
 mse.mars = mean((pred.mars - test.y) ^ 2)
 ```
-The test error measured by MSE using the final MARS model is $431.2879$.
+The test error measured by MSE using the final MARS model is `r mse.mars`
 
 ## GAM
 ```{r}
@@ -234,8 +204,27 @@ pred.gam = predict(gam.fit, newdata = test.x)
 mse.gam = mean((pred.gam - test.y) ^ 2)
 ```
 
-The test error measured by MSE using the final GAM is $416.6977$.
+The test error measured by MSE using the final GAM is `r mse.gam`.
 
+## Model Comparison
 
+Here, we compare the CV results of different models and choose the model with the smallest median RMSE.
+
+```{r}
+resamp =
+  resamples(list(lasso = lasso.fit, 
+                 gam = gam.fit,
+                 enet = enet.fit, 
+                 pls = pls.fit,
+                 mars = mars.fit))
+summary(resamp)
+```
+
+Using bw-plot to compare their RMSE.
+```{r}
+bwplot(resamp, metric = "RMSE")
+```
+
+Hence, we selected MARS model as it has smallest RMSE.
 
 
