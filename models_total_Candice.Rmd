@@ -54,6 +54,66 @@ x_test <- test_data %>% select(-recovery_time)
 y_test <- test_data$recovery_time
 ```
 
+# Model Training: Linear models
+## Lasso Regression Model
+```{r}
+lasso_grid <- expand.grid(
+  alpha = 1,
+  lambda = exp(seq(-6, 6, length.out = 100))
+)
+
+lasso_fit <- train(x, y, 
+  method = "glmnet",
+  tuneGrid = lasso_grid,
+  trControl = ctrl1
+)
+
+plot(lasso_fit, xTrans = log)
+```
+
+
+## Elastic Net Model
+```{r}
+enet_grid <- expand.grid(
+  alpha = seq(0, 1, length.out = 21),
+  lambda = exp(seq(-8, 6, length.out = 100))
+)
+
+enet_fit <- train(x, y,
+                  method = "glmnet",
+                  tuneGrid = enet_grid,
+                  trControl = ctrl1,
+                  preProcess = c("center", "scale")
+)
+plot(enet_fit)
+```
+
+
+## Partial Least Squares
+```{r}
+pls_fit <- train(x, y,
+                 method = "pls",
+                 tuneLength = 20,
+                 trControl = ctrl1,
+                 preProcess = c("center", "scale")
+                 )
+plot(pls_fit)
+```
+
+## Evaluate the performance of linear models 
+```{r}
+lasso_pred <- predict(lasso_fit, newdata = x_test)
+enet_pred <- predict(enet_fit, newdata = x_test)
+pls_pred <- predict(pls_fit, newdata = x_test)
+
+lasso_performance <- postResample(pred = lasso_pred, obs = test_data$recovery_time)
+lasso_performance
+enet_performance <- postResample(pred = enet_pred, obs = test_data$recovery_time)
+enet_performance
+pls_performance <- postResample(pred = pls_pred, obs = test_data$recovery_time)
+pls_performance
+```
+
 
 # Model Training: Nonlinear Methods
 
@@ -158,13 +218,13 @@ postResample(pred = test_predictions, obs = test_data$recovery_time)
 tunegrid <- expand.grid(mtry = 1:5)
 
 # build the rf model
-rf_model <- train(
+rf_fit <- train(
    x = x, y = y,
    method = "rf",
    trControl = ctrl1, 
    tuneGrid = tunegrid
  )
-rf_model_final <- rf_model$finalModel
+rf_model_final <- rf_fit$finalModel
 ```
 
 ### Evaluate the rf model's performance 
@@ -173,5 +233,22 @@ rf_model_final <- rf_model$finalModel
 rf_predictions <- predict(rf_model_final, x_test)
 postResample(pred = rf_predictions, obs = test_data$recovery_time)
 
+```
+
+## Model Comparison
+```{r}
+resamp =
+  resamples(list(lasso = lasso_fit, 
+                 gam = gam_fit,
+                 enet = enet_fit, 
+                 pls = pls_fit,
+                 mars = mars_fit,
+                 rf = rf_fit))
+summary(resamp)
+```
+
+### Using bw-plot to compare their RMSE
+```{r}
+bwplot(resamp, metric = "RMSE")
 ```
 
