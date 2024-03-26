@@ -19,6 +19,7 @@ library(caret)
 library(earth)
 library(tidyverse)
 library(gridExtra)
+
 ```
 
 # Load the training/test set & control method
@@ -49,6 +50,8 @@ test_data <- test_data %>%
 x <- train_data %>% select(-recovery_time)
 y <- train_data$recovery_time
 
+x_test <- test_data %>% select(-recovery_time)
+y_test <- test_data$recovery_time
 ```
 
 
@@ -122,6 +125,53 @@ The results from evaluating the MARS model on the test set provide three key met
 - The **MAE** gives us an indication that, despite the direction of the errors, the model's predictions are off by about two weeks on average. MAE is less sensitive to outliers than RMSE, so this value suggests that the model has a consistent average error across the test dataset.
 
 
-### Report 
+set.seed(1)
 
+## GAM model
+### Build the GAM model
+```{r}
+set.seed(123) # set the same seed
+gam_fit <- train(x = x, y = y,
+                 method = "gam",
+                 trControl = ctrl1)
+```
+
+
+### Display the summary of the final model
+```{r}
+gam_model_final <- gam_fit$finalModel
+summary(gam_model_final)
+```
+
+### Evaluate the GAM model's performance 
+```{r}
+test_predictions <- predict(gam_model_final, x_test)
+postResample(pred = test_predictions, obs = test_data$recovery_time)
+```
+
+
+## Random Forest 
+
+### Build the rf model
+```{r}
+# Parameters for Random Forest training
+tunegrid <- expand.grid(mtry = 1:5)
+
+# build the rf model
+rf_model <- train(
+   x = x, y = y,
+   method = "rf",
+   trControl = ctrl1, 
+   tuneGrid = tunegrid
+ )
+rf_model_final <- rf_model$finalModel
+```
+
+### Evaluate the rf model's performance 
+```{r}
+# Calculate and print the RMSE for training and test datasets
+rf_predictions <- predict(rf_model_final, x_test)
+postResample(pred = rf_predictions, obs = test_data$recovery_time)
+
+```
 
