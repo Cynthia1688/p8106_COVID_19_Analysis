@@ -1,0 +1,171 @@
+---
+title: "GAM"
+date: "2024-03-21"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: 3
+  header-includes:
+    -\usepackage{fancyhdr}
+    -\usepackage{lipsum}
+    -\pagestyle{fancy}
+    -\fancyhead[R]{\thepage}
+    -\fancypagestyle{plain}{\pagestyle{fancy}}
+---
+```{r setup}
+knitr::opts_chunk$set(
+  collapse = TRUE, 
+  warning = FALSE, 
+  message = FALSE,
+  fig.dim = c(10, 5),
+  fig.format = "png")
+```
+
+# Load Data and Package
+```{r}
+library(tidyverse)
+library(caret)
+## Load the the training/test set & control method
+
+# Load the training and test sets
+train_data <- read.csv("./Data/train_data.csv")
+test_data <- read.csv("./Data/test_data.csv")
+
+# Load the control method
+ctrl1 <- readRDS("./Data/train_control.rds")
+
+# change variables to be factors again
+train_data <- train_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+
+test_data <- test_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+```
+
+# GAM
+
+
+
+```{r GAM}
+set.seed(1)
+
+x_train = train_data |>  select(-recovery_time)
+y_train = train_data|> select(recovery_time) |>pull()
+
+x_test = test_data |>  select(-recovery_time)
+y_test = test_data|> select(recovery_time) |>pull()
+
+gam_model = train(x = x_train,
+                  y = y_train,
+                  method = "gam",
+                 #metric = "RMSE", by default
+                  trControl = trainControl(method = "cv", number = 10))
+
+gam_model_final = gam_model$finalModel
+ 
+summary(gam_model_final)
+
+# Calculate test RMSE of optimal model
+test_predictions = predict(gam_model_final, x_test)
+
+gam_test_RMSE = sqrt(mean((y_test - test_predictions)^2))
+gam_test_RMSE
+```
+
+
+
+```{r}
+set.seed(1)
+
+x_train_A = train_data |> filter(study == "A") |> select(-recovery_time)
+y_train_A = train_data|> filter(study == "A") |> select(recovery_time) |>pull()
+
+x_test = test_data |> filter(study == "A") |> select(-recovery_time) 
+y_test = test_data |> filter(study == "A") |> select(recovery_time)|>pull()
+
+model.gam.a <- train(x = x_train_A,
+                   y = y_train_A,
+                   method = "gam",
+                   #metric = "RMSE", by default
+                   trControl = trainControl(method = "cv", number = 10))
+
+
+ma_gam = model.gam.a$finalModel
+
+
+x_train_B = train_data |> filter(study == "B") |> select(-recovery_time)
+y_train_B = train_data|> filter(study == "B") |> select(recovery_time) |>pull()
+
+x_test_B = test_data |> filter(study == "B") |> select(-recovery_time) 
+y_test_B = test_data |> filter(study == "B") |> select(recovery_time)|>pull()
+
+model.gam.b <- train(x = x_train_B,
+                   y = y_train_B,
+                   method = "gam",
+                   #metric = "RMSE", by default
+                   trControl = trainControl(method = "cv", number = 10))
+
+
+mb_gam = model.gam.b$finalModel
+summary(ma_gam)
+summary(mb_gam)
+
+```
+
+
+# Random Forest
+
+```{r}
+set.seed(1)
+
+# long time for model training 
+# save the model in model file
+control  <- trainControl(method="repeatedcv", number=10, repeats=3)
+tunegrid <- expand.grid(mtry = 1:5)
+#model.rf  <- train(x = x_train,
+#                   y = y_train,
+#                   trControl = control, 
+#                   tuneGrid = tunegrid)
+#print(model.rf)
+#model.rf <- train(x = x_train,
+#                   y = y_train,
+#                  method = "rf",
+#                   #metric = "RMSE", by default
+#                   trControl = trainControl(method = "cv", number = 10))
+
+
+#saveRDS(model.rf, file = "./Model/model_rf.rds")
+rf_model = readRDS("./Model/model_rf.rds")
+
+rf_model_final = rf_model$finalModel
+#plot(model.rf$finalModel)
+```
+
+```{r,eval = FALSE }
+
+train_predictions =  predict(rf_model_final,x_train)
+
+rf_train_RMSE = sqrt(mean((y_train - train_predictions)^2))
+rf_train_RMSE
+
+# Calculate test RMSE of optimal model
+test_predictions = predict(rf_model_final, x_test)
+
+rf_test_RMSE = sqrt(mean((y_test - test_predictions)^2))
+rf_test_RMSE
+
+```
+
+
+
+
+
