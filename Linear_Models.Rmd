@@ -19,6 +19,7 @@ library(caret)
 library(glmnet)
 library(tidymodels)
 library(tidyverse)
+library(randomForest)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -145,7 +146,7 @@ pls.pred = predict(pls.fit, newdata = test.x)
 mse.pls = mean((test.y - pls.pred) ^ 2)
 ```
 
-As illustrated in the plot, 11 components are included in my model, and the test error (MSE) is `r mse.pls`
+As illustrated in the plot, `r pls.fit$bestTune` components are included in my model, and the test error (MSE) is `r mse.pls`
 
 The coefficients are as follows:
 ```{r}
@@ -203,8 +204,6 @@ Using the final model, we can predict on the test data.
 pred.gam = predict(gam.fit, newdata = test.x) 
 mse.gam = mean((pred.gam - test.y) ^ 2)
 ```
-
-The test error measured by MSE using the final GAM is `r mse.gam`.
 
 ## Model Comparison
 
