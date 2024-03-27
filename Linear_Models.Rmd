@@ -1,11 +1,14 @@
 ---
-title: "Linear Models"
+title: "Analysis_YangyangChen_yc4384"
 author: "Yangyang Chen"
 date: "`r Sys.Date()`"
 output:
-  pdf_document:
-    latex_engine: xelatex
+    pdf_document:
+       latex_engine: xelatex
+       toc: true
+       toc_depth: 2
 ---
+\newpage
 
 To gain a better understanding of the factors that predict recovery time from COVID-19 illness, a study was designed to combine three existing cohort studies that have been tracking participants for several years. The study collects recovery information through questionnaires and medical records, and leverages existing data on personal characteristics prior to the pandemic.
 
@@ -13,8 +16,10 @@ In this project, we predict the recovery time based on important risk factors. T
 
 First, we import the data and adjust the variable type. As we want to compare different models afterwards, we use caret.
 
-```{r, include = FALSE, message = FALSE, warning = FALSE}
+# Data Preprocessing
 
+## Data Importing
+```{r, include = FALSE, message = FALSE, warning = FALSE}
 library(caret)
 library(glmnet)
 library(tidymodels)
@@ -53,6 +58,7 @@ dat <- dat |>
   select(-id)
 ```
 
+## Data Cleaning
 ```{r}
 # data splitting
 data.split = initial_split(dat, prop = 0.8)
@@ -77,11 +83,17 @@ test.y = testing_data$recovery_time
 
 # cross validation
 ctrl = trainControl(method = "cv", number = 10) 
+# Load the control method
+ctrl1 <- readRDS("./Data/train_control.rds")
 ```
 
 There is no missing data in both datasets. The training dataset has 2400 observation and 16 variables, and the test dataset has 600 samples and 17 variables.
 
-# Lasso Regression Model
+# Linear Models
+
+## Lasso Regression Model
+
+### Build the Model
 ```{r}
 set.seed(2716)
 lasso.fit = training_data |> 
@@ -96,6 +108,7 @@ plot(lasso.fit, xTrans = log)
 
 The flattening in the curve occurs because the lasso regression model has reached a stable solution where no more coefficients become zero as the regularization parameter increases. At this point, further increasing the regularization parameter does not change the set of non-zero coefficients or their values, resulting in a flat region where the model's performance remains constant. This behavior indicates that the model has achieved the optimal level of sparsity, with the regularization parameter value at the start of the flat region corresponding to the desired sparse solution.
 
+### Evaluate Model Performance
 ```{r}
 lasso.pred = predict(lasso.fit, newdata = testing_data)
 mse.lasso = mean((test.y - lasso.pred) ^ 2)
@@ -105,6 +118,7 @@ The selected best tuning parameter is $\lambda = 1，\alpha = 1$, and the test e
 
 ## Elastic Net Model
 
+### Build the Model
 ```{r}
 set.seed(2716)
 enet.fit = training_data |>
@@ -123,6 +137,7 @@ plot(enet.fit, par.settings = myPar)
 
 The vertical line pattern in the graph is a characteristic behavior of the elastic net model. It occurs because the elastic net combines lasso and ridge regularization, which can lead to sparse solutions with some coefficients becoming exactly zero. As the regularization parameter increases, the model transitions between different sparse solutions, causing sudden drops or jumps in the cross-validation error curve. 
 
+### Evaluate Model Performance
 ```{r}
 enet.pred = predict(enet.fit, newdata = testing_data) 
 mse.enet = mean((test.y - enet.pred) ^ 2)
@@ -132,6 +147,7 @@ The selected tuning parameter is $\alpha = 0$, $\lambda = 1$, and the test error
 
 ## Partial Least Square
 
+### Build the Model
 ```{r}
 set.seed(2716)
 
@@ -141,6 +157,7 @@ pls.fit = train(train.x, train.y, method = "pls",
 ggplot(pls.fit, highlight = T)
 ```
 
+### Evaluate Model Performance
 ```{r}
 pls.pred = predict(pls.fit, newdata = test.x) 
 mse.pls = mean((test.y - pls.pred) ^ 2)
@@ -148,13 +165,17 @@ mse.pls = mean((test.y - pls.pred) ^ 2)
 
 As illustrated in the plot, `r pls.fit$bestTune` components are included in my model, and the test error (MSE) is `r mse.pls`
 
+### Model Coefficients
 The coefficients are as follows:
 ```{r}
 coef(pls.fit$finalModel)
 ```
 
+# Non-linear Models
+
 ## MARS
 
+### Build the Model
 Now, train a multivariate adaptive regression spline (MARS) model to predict the response variable.
 
 Since there are two tuning parameters associated with the MARS model: the degree of interactions and the number of retained terms, we need to perform a grid search to identify the optimal combination of these hyperparameters that minimize prediction error.
@@ -176,6 +197,8 @@ To better understand the relationship between these features and outstate, we ca
 ```{r}
 pdp::partial(mars.fit, pred.var = c("bmi"), grid.resolution = 10) |> autoplot()
 ```
+### Evaluate Model Performance
+
 Using the final model, we can predict on the test data.
 
 ```{r}
@@ -185,6 +208,8 @@ mse.mars = mean((pred.mars - test.y) ^ 2)
 The test error measured by MSE using the final MARS model is `r mse.mars`
 
 ## GAM
+
+### Build the Model
 ```{r}
 set.seed(2716)
 gam.fit = train(train.x, train.y, method = "gam", trControl = ctrl)
@@ -198,6 +223,7 @@ plot(gam.fit$finalModel)
 
 It could be observed that certain variables (*age*, *sbp*, *ldl*) have no relationship with the *recovery_time*, *bmi*, and *height* both have a positive relationship with *recovery_time*. 
 
+### Evaluate Model Performance
 Using the final model, we can predict on the test data.
 
 ```{r}
@@ -205,7 +231,32 @@ pred.gam = predict(gam.fit, newdata = test.x)
 mse.gam = mean((pred.gam - test.y) ^ 2)
 ```
 
-## Model Comparison
+## Random Forest 
+
+### Build the Model
+```{r}
+# Parameters for Random Forest training
+tunegrid <- expand.grid(mtry = 1:5)
+
+# build the rf model
+rf.fit <- train(
+   train.x, train.y,
+   method = "rf",
+   trControl = ctrl1, 
+   tuneGrid = tunegrid
+ )
+rf.final <- rf.fit$finalModel
+```
+
+### Evaluate Model Performance 
+```{r}
+# Calculate and print the RMSE for training and test datasets
+rf.pred <- predict(rf.final, train.x)
+postResample(pred = rf.pred, obs =testing_data$recovery_time)
+
+```
+
+# Model Comparison and Conclusions
 
 Here, we compare the CV results of different models and choose the model with the smallest median RMSE.
 
@@ -215,7 +266,8 @@ resamp =
                  gam = gam.fit,
                  enet = enet.fit, 
                  pls = pls.fit,
-                 mars = mars.fit))
+                 mars = mars.fit,
+                 rf = rf.fit))
 summary(resamp)
 ```
 
@@ -224,6 +276,6 @@ Using bw-plot to compare their RMSE.
 bwplot(resamp, metric = "RMSE")
 ```
 
-Hence, we selected MARS model as it has smallest RMSE.
+Hence, we selected Random Forest Model as it has smallest RMSE.
 
 
