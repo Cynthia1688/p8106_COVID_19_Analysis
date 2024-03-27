@@ -108,6 +108,18 @@ plot(lasso.fit, xTrans = log)
 
 The flattening in the curve occurs because the lasso regression model has reached a stable solution where no more coefficients become zero as the regularization parameter increases. At this point, further increasing the regularization parameter does not change the set of non-zero coefficients or their values, resulting in a flat region where the model's performance remains constant. This behavior indicates that the model has achieved the optimal level of sparsity, with the regularization parameter value at the start of the flat region corresponding to the desired sparse solution.
 
+### Model Coefficients
+```{r}
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(lasso.fit$results$RMSE)
+
+# Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(lasso.fit$finalModel, s = lasso.fit$results$lambda[best_model_index])
+
+# Print the coefficients
+print(optimal_model_coeffs)
+```
+
 ### Evaluate Model Performance
 ```{r}
 lasso.pred = predict(lasso.fit, newdata = testing_data)
@@ -137,6 +149,18 @@ plot(enet.fit, par.settings = myPar)
 
 The vertical line pattern in the graph is a characteristic behavior of the elastic net model. It occurs because the elastic net combines lasso and ridge regularization, which can lead to sparse solutions with some coefficients becoming exactly zero. As the regularization parameter increases, the model transitions between different sparse solutions, causing sudden drops or jumps in the cross-validation error curve. 
 
+### Model Coefficients
+```{r}
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(enet.fit$results$RMSE)
+
+# Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(enet.fit$finalModel, s = enet.fit$results$lambda[best_model_index])
+
+# Print the coefficients
+print(optimal_model_coeffs)
+```
+
 ### Evaluate Model Performance
 ```{r}
 enet.pred = predict(enet.fit, newdata = testing_data) 
@@ -157,6 +181,18 @@ pls.fit = train(train.x, train.y, method = "pls",
 ggplot(pls.fit, highlight = T)
 ```
 
+### Model Coefficients
+```{r}
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(pls.fit$results$RMSE)
+
+# Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(pls.fit$finalModel, s = pls.fit$results$lambda[best_model_index])
+
+# Print the coefficients
+print(optimal_model_coeffs)
+```
+
 ### Evaluate Model Performance
 ```{r}
 pls.pred = predict(pls.fit, newdata = test.x) 
@@ -165,11 +201,6 @@ mse.pls = mean((test.y - pls.pred) ^ 2)
 
 As illustrated in the plot, `r pls.fit$bestTune` components are included in my model, and the test error (MSE) is `r mse.pls`
 
-### Model Coefficients
-The coefficients are as follows:
-```{r}
-coef(pls.fit$finalModel)
-```
 
 # Non-linear Models
 
@@ -197,6 +228,19 @@ To better understand the relationship between these features and outstate, we ca
 ```{r}
 pdp::partial(mars.fit, pred.var = c("bmi"), grid.resolution = 10) |> autoplot()
 ```
+
+### Model Coefficients
+```{r}
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(mars.fit$results$RMSE)
+
+# Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(mars.fit$finalModel, s = mars.fit$results$lambda[best_model_index])
+
+# Print the coefficients
+print(optimal_model_coeffs)
+```
+
 ### Evaluate Model Performance
 
 Using the final model, we can predict on the test data.
@@ -223,6 +267,18 @@ plot(gam.fit$finalModel)
 
 It could be observed that certain variables (*age*, *sbp*, *ldl*) have no relationship with the *recovery_time*, *bmi*, and *height* both have a positive relationship with *recovery_time*. 
 
+### Model Coefficients
+```{r}
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(gam.fit$results$RMSE)
+
+# Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(gam.fit$finalModel, s = gam.fit$results$lambda[best_model_index])
+
+# Print the coefficients
+print(optimal_model_coeffs)
+```
+
 ### Evaluate Model Performance
 Using the final model, we can predict on the test data.
 
@@ -246,6 +302,18 @@ rf.fit <- train(
    tuneGrid = tunegrid
  )
 rf.final <- rf.fit$finalModel
+```
+
+### Model Coefficients
+```{r}
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(gam.fit$results$RMSE)
+
+# Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(gam.fit$finalModel, s = gam.fit$results$lambda[best_model_index])
+
+# Print the coefficients
+print(optimal_model_coeffs)
 ```
 
 ### Evaluate Model Performance 
