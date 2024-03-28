@@ -54,7 +54,9 @@ dat <- dat |>
          diabetes = as_factor(diabetes),
          hypertension = as_factor(hypertension),
          vaccine = as_factor(vaccine),
-         severity = as_factor(severity)) |> 
+         severity = as_factor(severity),
+         race = as_factor(race),
+         smoking = as.factor(smoking)) |> 
   select(-id)
 ```
 
