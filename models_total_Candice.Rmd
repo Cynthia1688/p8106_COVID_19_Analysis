@@ -24,13 +24,13 @@ library(gridExtra)
 
 # Load the training/test set & control method
 ```{r}
-set.seed(2716)
 # Load the training and test sets
 train_data <- read.csv("./Data/train_data.csv")
 test_data <- read.csv("./Data/test_data.csv")
 
+set.seed(2716)
 # Load the control method
-ctrl1 <- readRDS("./Data/train_control.rds")
+ctrl1 <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
 
 # change variables to be factors again
 train_data <- train_data %>%
@@ -61,19 +61,30 @@ y_test <- test_data$recovery_time
 # Model Training: Linear models
 ## Lasso Regression Model
 ```{r}
-set.seed(2716)
 lasso_grid <- expand.grid(
   alpha = 1,
-  lambda = exp(seq(-6, 6, length.out = 100))
+  lambda = exp(seq(-4, 4, length.out = 100))
 )
 
-lasso_fit <- train(x, y, 
-  method = "glmnet",
-  tuneGrid = lasso_grid,
-  trControl = ctrl1
+set.seed(2716)
+     
+lasso_fit <- train(recovery_time ~ .,
+                   data = train_data,
+                   method = "glmnet",
+                   tuneGrid = lasso_grid,
+                   trControl = ctrl1,
+                   preProcess = c("center", "scale")
 )
 
 plot(lasso_fit, xTrans = log)
+
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(lasso_fit$results$RMSE) # Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(lasso_fit$finalModel, 
+                             s = lasso_fit$results$lambda[best_model_index])
+# Print the coefficients
+print(optimal_model_coeffs)
+
 ```
 
 
@@ -82,28 +93,38 @@ plot(lasso_fit, xTrans = log)
 set.seed(2716)
 enet_grid <- expand.grid(
   alpha = seq(0, 1, length.out = 21),
-  lambda = exp(seq(-8, 6, length.out = 100))
+  lambda = exp(seq(-4, 4, length.out = 100))
 )
 
-enet_fit <- train(x, y,
+enet_fit <- train(recovery_time ~ .,
+                  data = train_data,
                   method = "glmnet",
                   tuneGrid = enet_grid,
                   trControl = ctrl1,
                   preProcess = c("center", "scale")
 )
 plot(enet_fit)
+
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(enet_fit$results$RMSE) # Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(enet_fit$finalModel, 
+                             s = enet_fit$results$lambda[best_model_index])
+# Print the coefficients
+print(optimal_model_coeffs)
 ```
 
 
 ## Partial Least Squares
 ```{r}
 set.seed(2716)
+
 pls_fit <- train(x, y,
                  method = "pls",
                  tuneLength = 20,
                  trControl = ctrl1,
                  preProcess = c("center", "scale")
                  )
+
 plot(pls_fit)
 ```
 
@@ -259,5 +280,29 @@ summary(resamp)
 ### Using bw-plot to compare their RMSE
 ```{r}
 bwplot(resamp, metric = "RMSE")
+```
+
+```{r}
+
+lasso_pred <- predict(lasso_fit, newdata = x_test)
+enet_pred <- predict(enet_fit, newdata = x_test)
+pls_pred <- predict(pls_fit, newdata = x_test)
+mars_pred <- predict(mars_fit, newdata = x_test)
+gam_pred <- predict(gam_fit, newdata = x_test)
+rf_pred <- predict(rf_model_final, x_test)
+
+
+lasso_performance <- postResample(pred = lasso_pred, obs = test_data$recovery_time)
+lasso_performance
+enet_performance <- postResample(pred = enet_pred, obs = test_data$recovery_time)
+enet_performance
+pls_performance <- postResample(pred = pls_pred, obs = test_data$recovery_time)
+pls_performance
+mars_performance <- postResample(pred = mars_pred, obs = test_data$recovery_time)
+mars_performance
+gam_performance <- postResample(pred = gam_pred, obs = test_data$recovery_time)
+gam_performance
+rf_performance <- postResample(pred = rf_pred, obs = test_data$recovery_time)
+rf_performance
 ```
 
