@@ -38,15 +38,18 @@ train_data <- train_data %>%
          diabetes = as_factor(diabetes),
          hypertension = as_factor(hypertension),
          vaccine = as_factor(vaccine),
+         race = as_factor(race),
+         smoking = as_factor(smoking),
          severity = as_factor(severity))
 
 test_data <- test_data %>%
   mutate(gender = as_factor(gender),
          diabetes = as_factor(diabetes),
          hypertension = as_factor(hypertension),
+         race = as_factor(race),
+         smoking = as_factor(smoking),
          vaccine = as_factor(vaccine),
          severity = as_factor(severity))
-
 # matrix of predictors
 x <- train_data %>% select(-recovery_time)
 y <- train_data$recovery_time
