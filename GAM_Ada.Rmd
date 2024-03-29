@@ -23,6 +23,7 @@ knitr::opts_chunk$set(
 ```
 
 # Load Data and Package
+
 ```{r}
 library(tidyverse)
 library(caret)
@@ -33,22 +34,13 @@ train_data <- read.csv("./Data/train_data.csv")
 test_data <- read.csv("./Data/test_data.csv")
 
 # Load the control method
-ctrl1 <- readRDS("./Data/train_control.rds")
+#ctrl1 <- readRDS("./Data/train_control.rds")
 
 # change variables to be factors again
-train_data <- train_data %>%
-  mutate(gender = as_factor(gender),
-         diabetes = as_factor(diabetes),
-         hypertension = as_factor(hypertension),
-         vaccine = as_factor(vaccine),
-         severity = as_factor(severity))
-
-test_data <- test_data %>%
-  mutate(gender = as_factor(gender),
-         diabetes = as_factor(diabetes),
-         hypertension = as_factor(hypertension),
-         vaccine = as_factor(vaccine),
-         severity = as_factor(severity))
+train_data <- train_data |>
+ mutate(across(c(gender,diabetes, hypertension,vaccine,severity,race,smoking), ~factor(.)))
+test_data <- test_data  |>
+  mutate(across(c(gender,diabetes, hypertension,vaccine,severity,race,smoking), ~factor(.)))
 
 x_train = train_data |>  select(-recovery_time)
 y_train = train_data|> select(recovery_time) |>pull()
@@ -63,10 +55,11 @@ y_test = test_data|> select(recovery_time) |>pull()
 
 ```{r}
 set.seed(2716)
-lasso_model =  train(x = x_train, y = y_train,  method = "glmnet",
+lasso_model =  train(recovery_time~ .,  method = "glmnet",
+                     data = train_data,
                      tuneGrid = expand.grid(alpha = 1,
                                             lambda = exp(seq(4, -4, length = 100))),
-                     trControl = ctrl1,
+                     trControl =  trainControl(method = "cv", number = 10) ,
                      preProcess = c("center", "scale"))
 plot(lasso_model, xTrans = log)
 # Get the index of the model with the lowest RMSE
@@ -86,7 +79,9 @@ lasso_mse = mean((y_test - lasso_pred) ^ 2)
 
 ```{r}
 set.seed(2716)
-enet_model = train(x = x_train, y = y_train,  method = "glmnet",
+enet_model = train(recovery_time~ .,
+                   data = train_data,
+                   method = "glmnet",
                      tuneGrid = expand.grid(alpha = seq(0, 1, length = 21),
                                             lambda = exp(seq(4, -4, length = 100))),
                      trControl = ctrl1,
@@ -112,6 +107,7 @@ enet_mse = mean((y_test - enet_pred) ^ 2)
 ```
 
 # PLS
+
 ```{r, pls, eval = FALSE, echo=FALSE}
 pls_model = train(x = x_train, y = y_train,
                   method = "pls",
@@ -169,8 +165,6 @@ gam_mse = mean((gam_pred - y_test) ^ 2)
 
 
 ```{r}
-set.seed(1)
-
 x_train_A = train_data |> filter(study == "A") |> select(-recovery_time)
 y_train_A = train_data|> filter(study == "A") |> select(recovery_time) |>pull()
 
@@ -216,11 +210,11 @@ set.seed(2716)
 # save the model in model file
 #control  <- trainControl(method="repeatedcv", number=10, repeats=3)
 tunegrid <- expand.grid(mtry = 1:5)
-#rf_model  <- train(x = x_train,
-#                   y = y_train,
-#                   method = "rf",
-#                   trControl = ctrl1, 
-#                   tuneGrid = tunegrid)
+rf_model  <- train(x = x_train,
+                   y = y_train,
+                   method = "rf",
+                   trControl = ctrl1, 
+                   tuneGrid = tunegrid)
 
 #model.rf <- train(x = x_train,
 #                   y = y_train,
@@ -228,23 +222,21 @@ tunegrid <- expand.grid(mtry = 1:5)
 #                   #metric = "RMSE", by default
 #                   trControl = trainControl(method = "cv", number = 10))
 
-
-#saveRDS(rf_model, file = "./Model/model_rf.rds")
+saveRDS(rf_model, file = "./Model/model_rf.rds")
 rf_model = readRDS("./Model/model_rf.rds")
 
 print(rf_model)
 
-
+summary(rf_model)
 rf_pred = predict(rf_model, x_test)
 
 rf_mse = mean((rf_pred - y_test) ^ 2)
-
+varImp(rf_model)
 ```
 # Resample
 
 ```{r, resample}
-resamp =
-  resamples(list(lasso = lasso_model, 
+resamp =(list(lasso = lasso_model, 
                  gam = gam_model,
                  enet = enet_model,
                #  pls = pls.fit,
