@@ -1,0 +1,491 @@
+---
+title: "EDA_and_models_candice"
+author: "Candice Yu"
+date: "2024-03-23"
+output:
+    pdf_document:
+       latex_engine: xelatex
+       toc: true
+       toc_depth: 2
+---
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+```{r echo = T, message = FALSE, results = 'hide', warning = FALSE}
+library(caret)
+library(earth)
+library(tidyverse)
+library(gridExtra)
+```
+
+# Load Data 
+```{r}
+load("./Data/recovery.RData")
+dat <- dat %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity)) %>%
+  select(-id)
+```
+
+
+# EDA
+## Overview of the Data 
+```{r}
+# brief summary of the data 
+skimr::skim(dat)
+```
+
+## EDA for Continuous Variables 
+
+### Correlation plot for continuous variables
+```{r}
+# correlation plot for continuous variables
+continuous_vars <- dat %>% 
+  select(height, weight, bmi, SBP, LDL, recovery_time)
+correlations <- cor(continuous_vars) 
+corrplot::corrplot(correlations, method = "circle")
+```
+
+
+### Scatter plots to explore potential relationships
+```{r}
+# between time to recovery and bmi
+ggplot(dat, aes(x = bmi, y = recovery_time, color = gender)) + 
+  geom_point() + geom_smooth(method = "lm") +
+  labs(title = "Time to Recovery vs. BMI", 
+       x = "BMI", 
+       y = "Time to Recovery (Days)")
+
+# between time to recovery and height
+ggplot(dat, aes(x = height, y = recovery_time, color = gender)) + 
+  geom_point() + geom_smooth(method = "lm") +
+  labs(title = "Time to Recovery vs. Height", 
+       x = "Height", 
+       y = "Time to Recovery (Days)")
+```
+
+The correlation plot and scatter plots show some relationships between continuous variables, but none of them appear to be strongly correlated with `recovery_time`. This may suggest that linear relationships are not strong, and hence a non-linear model could be more appropriate.
+
+
+## EDA for Discrete Variables 
+### Heatmap for severity and vaccination status
+```{r}
+# Heatmap for systolic blood pressure across severity and vaccination status
+dat %>% 
+  group_by(severity, vaccine) %>%
+  summarise(avg_recovery_time = mean(recovery_time)) %>%
+  ggplot(aes(x = factor(severity), y = factor(vaccine), fill = avg_recovery_time)) +
+  geom_tile() +
+  labs(title = "Heatmap for severity and vaccination status",
+       x = "Severity of COVID-19", 
+       y = "Vaccination Status", 
+       fill = "Average Recovery Time")
+```
+
+The heatmap helps in understanding the bivariate relationship between severity, vaccination status, and recovery time. 
+
+**Observations from the Heatmap:**
+
+- Individuals with severe COVID-19 infection (1 on the x-axis) have longer average recovery times than those with non-severe infections, regardless of vaccination status. 
+- Vaccination status seems to have an influence on the recovery time. Those who are vaccinated (1 on the y-axis) tend to have shorter recovery times even when the infection is severe.
+
+**Implications for Modeling:**
+
+- The heatmap suggests there might be an interaction effect between severity and vaccination status on the recovery time. Therefore, when modeling, consider including an interaction term between these two variables.
+- Given the apparent differences in recovery time across the groups, both severity and vaccination status should be included as important predictors in the model.
+- If developing separate models for different subgroups is a consideration, you might want to stratify the analysis by severity or vaccination status.
+
+
+### Faceted grid plot for categorical variables
+```{r, fig.width = 8, fig.height = 10}
+
+# faceted grid plot for categorical variables
+categorical_vars <- c("smoking", "diabetes", "hypertension", "vaccine", "severity")
+faceted_plots <- lapply(categorical_vars, function(var) {
+  ggplot(dat, aes_string(x = var, y = "recovery_time")) + 
+    geom_boxplot(aes(fill = factor(..x..))) + 
+    facet_wrap(~study) + 
+    labs(title = paste("Recovery time by", var), y = "Time to recovery") +
+    theme_minimal()
+})
+
+# combine the plots into one grid
+grid.arrange(scatter_bmi, scatter_sbp, scatter_ldl, grobs = faceted_plots, ncol = 2)
+```
+
+The boxplots indicate a significant difference in recovery times between study groups A and B across several categorical factors, which suggests that `study` is an important variable to include in the model.
+
+
+# Preprocess of the Data 
+```{r}
+data <- dat %>%
+  select(-weight, -height)
+
+# normalize/standardize numerical variables 
+#num_vars <- names(data)[sapply(data, is.numeric)][-7]
+#preprocess_params <- preProcess(data[, num_vars], method = c("center", "scale"))
+#data[num_vars] <- predict(preprocess_params, data[, num_vars])
+
+# log transform 'recovery_time' since it's highly skewed
+#data$recovery_time <- log(data$recovery_time) 
+```
+
+
+## Split data & Define the control method
+```{r}
+# split data into training and test sets
+set.seed(2716) 
+indexes <- createDataPartition(data$recovery_time, p = 0.8, list = FALSE)
+train_data <- data[indexes, ]
+test_data <- data[-indexes, ]
+
+# matrix of predictors
+x <- train_data %>% select(-recovery_time)
+y <- train_data$recovery_time
+
+# define the control method for training
+ctrl1 <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
+
+```
+
+**Model Training Procedure and Final Model:**
+
+1. Data Splitting: The dataset was split into training (80%) and test (20%) sets using a stratified random sampling approach based on `recovery_time`.
+2. The `train` function from the `caret` package was used to train the MARS model using 10-fold cross-validation. This approach helps to prevent overfitting and gives an estimate of the model performance on new data.
+3. The model with the lowest cross-validated Root Mean Squared Error (RMSE) was selected as the final model.
+
+
+## Export the the training/test set & control method
+```{r}
+# save the training and test sets to CSV files
+write.csv(train_data, "./Data/train_data.csv", row.names = FALSE)
+write.csv(test_data, "./Data/test_data.csv", row.names = FALSE)
+
+# save the control method using saveRDS
+saveRDS(ctrl1, "./Data/train_control.rds")
+
+```
+
+## Load the training/test set & control method
+```{r}
+# Load the training and test sets
+train_data <- read.csv("./Data/train_data.csv")
+test_data <- read.csv("./Data/test_data.csv")
+
+# Load the control method
+ctrl1 <- readRDS("./Data/train_control.rds")
+
+# change variables to be factors again
+train_data <- train_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         race = as_factor(race),
+         smoking = as_factor(smoking),
+         severity = as_factor(severity))
+
+test_data <- test_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         race = as_factor(race),
+         smoking = as_factor(smoking),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+```
+
+
+
+# Load the training/test set & control method
+```{r}
+# Load the training and test sets
+train_data <- read.csv("./Data/train_data.csv")
+test_data <- read.csv("./Data/test_data.csv")
+
+set.seed(2716)
+# Load the control method
+ctrl1 <- trainControl(method = "cv", number = 10) # 10-fold cross-validation
+
+# change variables to be factors again
+train_data <- train_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         vaccine = as_factor(vaccine),
+         race = as_factor(race),
+         smoking = as_factor(smoking),
+         severity = as_factor(severity))
+
+test_data <- test_data %>%
+  mutate(gender = as_factor(gender),
+         diabetes = as_factor(diabetes),
+         hypertension = as_factor(hypertension),
+         race = as_factor(race),
+         smoking = as_factor(smoking),
+         vaccine = as_factor(vaccine),
+         severity = as_factor(severity))
+# matrix of predictors
+x <- train_data %>% select(-recovery_time)
+y <- train_data$recovery_time
+
+x_test <- test_data %>% select(-recovery_time)
+y_test <- test_data$recovery_time
+```
+
+# Model Training: Linear models
+## Lasso Regression Model
+```{r}
+lasso_grid <- expand.grid(
+  alpha = 1,
+  lambda = exp(seq(-4, 4, length.out = 100))
+)
+
+set.seed(2716)
+     
+lasso_fit <- train(recovery_time ~ .,
+                   data = train_data,
+                   method = "glmnet",
+                   tuneGrid = lasso_grid,
+                   trControl = ctrl1,
+                   preProcess = c("center", "scale")
+)
+
+plot(lasso_fit, xTrans = log)
+
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(lasso_fit$results$RMSE) # Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(lasso_fit$finalModel, 
+                             s = lasso_fit$results$lambda[best_model_index])
+# Print the coefficients
+print(optimal_model_coeffs)
+
+```
+
+
+## Elastic Net Model
+```{r}
+set.seed(2716)
+enet_grid <- expand.grid(
+  alpha = seq(0, 1, length.out = 21),
+  lambda = exp(seq(-4, 4, length.out = 100))
+)
+
+enet_fit <- train(recovery_time ~ .,
+                  data = train_data,
+                  method = "glmnet",
+                  tuneGrid = enet_grid,
+                  trControl = ctrl1,
+                  preProcess = c("center", "scale")
+)
+plot(enet_fit)
+
+# Get the index of the model with the lowest RMSE
+best_model_index <- which.min(enet_fit$results$RMSE) # Get the coefficients of the optimal model
+optimal_model_coeffs <- coef(enet_fit$finalModel, 
+                             s = enet_fit$results$lambda[best_model_index])
+# Print the coefficients
+print(optimal_model_coeffs)
+```
+
+
+## Partial Least Squares
+```{r}
+set.seed(2716)
+
+pls_fit <- train(x, y,
+                 method = "pls",
+                 tuneLength = 20,
+                 trControl = ctrl1,
+                 preProcess = c("center", "scale")
+                 )
+
+plot(pls_fit)
+```
+
+## Evaluate the performance of linear models 
+```{r}
+lasso_pred <- predict(lasso_fit, newdata = x_test)
+enet_pred <- predict(enet_fit, newdata = x_test)
+pls_pred <- predict(pls_fit, newdata = x_test)
+
+lasso_performance <- postResample(pred = lasso_pred, obs = test_data$recovery_time)
+lasso_performance
+enet_performance <- postResample(pred = enet_pred, obs = test_data$recovery_time)
+enet_performance
+pls_performance <- postResample(pred = pls_pred, obs = test_data$recovery_time)
+pls_performance
+```
+
+
+# Model Training: Nonlinear Methods
+
+The EDA plots show that the relationship between predictors and recovery time is likely non-linear, and there may be interactions between variables, especially considering the difference between study groups A and B.
+
+Given the results from the EDA plots and the nature of the data, both generalized additive models (GAM) and multivariate adaptive regression splines (MARS) could be suitable choices for modeling. They both are capable of modeling complex, non-linear relationships in the data. 
+
+
+## Multivariate Adaptive Regression Spline (MARS)
+### Build the MARS model
+```{r}
+# train the MARS model
+mars_grid <- expand.grid(degree = 1:3, nprune = 2:25)
+
+set.seed(2716) # set the same seed
+mars_fit <- train(x, y, 
+                    method = "earth",
+                    tuneGrid = mars_grid,
+                    trControl = ctrl1)
+```
+
+### MARS Model Summary
+```{r}
+# Model summary
+summary(mars_fit)
+ggplot(mars_fit)
+
+mars_fit$bestTune
+coef(mars_fit$finalModel)
+```
+
+**MARS Model Description:**
+
+The MARS model is a flexible regression method capable of uncovering complex nonlinear relationships between the dependent variable (recovery_time) and a set of independent variables. It does this by fitting piecewise linear regressions, which can adapt to various data shapes. This is particularly useful for modeling the recovery time from COVID-19 since the relationship between predictors and recovery time could be highly nonlinear and interaction-heavy.
+
+**Assumptions:**
+
+- The relationships between predictors and the response can be captured using piecewise linear functions.
+- Interactions between variables can be important and are modeled by products of basis functions.
+- There is no assumption of a parametric form of the relationship between predictors and the response.
+
+**Final Model Selection:**
+
+- The optimal hyperparameters were degree (degree of interaction) = 3 and nprune (number of terms) = 16.
+- The selected model terms involve interactions between patient characteristics, their biometrics, the specific study group they belong to, and some non-linear transformations of these variables.
+
+
+### Evaluate performance on the test set
+```{r}
+# Evaluate its performance on the test set:
+predictions <- predict(mars_fit, newdata = test_data)
+postResample(pred = predictions, obs = test_data$recovery_time)
+```
+
+The results from evaluating the MARS model on the test set provide three key metrics:
+
+1. **Root Mean Squared Error (RMSE):** RMSE measures the average magnitude of the prediction error. It represents the square root of the average squared differences between the predicted and actual values. An RMSE of 19.629 suggests that, on average, the model's predictions of the recovery time are about 19.629 days off from the actual recovery times.
+
+2. **R-squared ($R^2$):** $R^2$ is a statistical measure that represents the proportion of the variance for the dependent variable that's explained by the independent variables in the model. In your case, the $R^2$ value is 0.2177, which means approximately 21.77% of the variance in the recovery time is explained by the model. This is a relatively low value, indicating that there is a lot of variability in the recovery time that is not captured by the model.
+
+3. **Mean Absolute Error (MAE):** MAE measures the average absolute difference between the predicted values and the actual values, providing a linear score that reflects the average error magnitude without considering its direction. An MAE of 12.409 suggests that the model's predictions are, on average, 12.409 days different from the actual recovery time.
+
+### Interpretation
+
+- The **RMSE** of 19.629 days is relatively high, depending on the context of the recovery times' range. If the typical recovery time is on the order of a few days, this is a substantial error. However, if recovery times are generally several weeks, the error may be more acceptable.
+
+- The **R-squared** value of 0.2177 is not very high, suggesting that there might be other factors not included in the model that affect the recovery time. It also indicates that the relationship between the predictors and the recovery time has a significant amount of unexplained variability.
+
+- The **MAE** gives us an indication that, despite the direction of the errors, the model's predictions are off by about two weeks on average. MAE is less sensitive to outliers than RMSE, so this value suggests that the model has a consistent average error across the test dataset.
+
+
+
+
+## GAM model
+### Build the GAM model
+```{r}
+set.seed(2716) # set the same seed
+gam_fit <- train(x = x, y = y,
+                 method = "gam",
+                 trControl = ctrl1)
+```
+
+
+### Display the summary of the final model
+```{r}
+gam_model_final <- gam_fit$finalModel
+summary(gam_model_final)
+```
+
+### Evaluate the GAM model's performance 
+```{r}
+test_predictions <- predict(gam_model_final, x_test)
+postResample(pred = test_predictions, obs = test_data$recovery_time)
+```
+
+
+## Random Forest 
+
+### Build the rf model
+```{r}
+set.seed(2716)
+# Parameters for Random Forest training
+tunegrid <- expand.grid(mtry = 1:5)
+
+# build the rf model
+rf_fit <- train(
+   x = x, y = y,
+   method = "rf",
+   trControl = ctrl1, 
+   tuneGrid = tunegrid
+ )
+rf_model_final <- rf_fit$finalModel
+```
+
+### Evaluate the rf model's performance 
+```{r}
+# Calculate and print the RMSE for training and test datasets
+rf_predictions <- predict(rf_model_final, x_test)
+postResample(pred = rf_predictions, obs = test_data$recovery_time)
+
+```
+
+## Model Comparison
+```{r}
+set.seed(2716)
+resamp =
+  resamples(list(lasso = lasso_fit, 
+                 gam = gam_fit,
+                 enet = enet_fit, 
+                 pls = pls_fit,
+                 mars = mars_fit,
+                 rf = rf_fit))
+summary(resamp)
+```
+
+### Using bw-plot to compare their RMSE
+```{r}
+bwplot(resamp, metric = "RMSE")
+```
+
+```{r}
+
+lasso_pred <- predict(lasso_fit, newdata = x_test)
+enet_pred <- predict(enet_fit, newdata = x_test)
+pls_pred <- predict(pls_fit, newdata = x_test)
+mars_pred <- predict(mars_fit, newdata = x_test)
+gam_pred <- predict(gam_fit, newdata = x_test)
+rf_pred <- predict(rf_model_final, x_test)
+
+
+lasso_performance <- postResample(pred = lasso_pred, obs = test_data$recovery_time)
+lasso_performance
+enet_performance <- postResample(pred = enet_pred, obs = test_data$recovery_time)
+enet_performance
+pls_performance <- postResample(pred = pls_pred, obs = test_data$recovery_time)
+pls_performance
+mars_performance <- postResample(pred = mars_pred, obs = test_data$recovery_time)
+mars_performance
+gam_performance <- postResample(pred = gam_pred, obs = test_data$recovery_time)
+gam_performance
+rf_performance <- postResample(pred = rf_pred, obs = test_data$recovery_time)
+rf_performance
+```
+
+
